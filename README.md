@@ -229,7 +229,3 @@ Make sure `pnpm run dev` is running in a second terminal alongside `php artisan 
 ```
 
 ---
-
-## License
-
-This project is open-sourced under the [MIT license](https://opensource.org/licenses/MIT).
