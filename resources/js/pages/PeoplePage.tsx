@@ -4,7 +4,6 @@ import {
     SheetContent,
     SheetHeader,
     SheetTitle,
-    SheetFooter,
     SheetClose,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,15 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+    PaginationEllipsis,
+} from "@/components/ui/pagination";
 import { Pencil, Trash2, UserPlus, Users, Search } from "lucide-react";
 
 interface Person {
@@ -27,6 +35,7 @@ interface Person {
 }
 
 const emptyForm = { firstName: "", lastName: "" };
+const ITEMS_PER_PAGE = 5;
 
 const avatarGradients = [
     "from-violet-500 to-indigo-500",
@@ -48,6 +57,7 @@ export default function PeoplePage() {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [errors, setErrors] = useState(emptyForm);
     const [search, setSearch] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
 
     const validate = () => {
         const newErrors = { firstName: "", lastName: "" };
@@ -84,6 +94,8 @@ export default function PeoplePage() {
         } else {
             const newId = people.length > 0 ? Math.max(...people.map((p) => p.id)) + 1 : 1;
             setPeople((prev) => [...prev, { id: newId, firstName: form.firstName, lastName: form.lastName }]);
+            const newTotal = people.length + 1;
+            setCurrentPage(Math.ceil(newTotal / ITEMS_PER_PAGE));
         }
         setIsOpen(false);
         setForm(emptyForm);
@@ -91,12 +103,24 @@ export default function PeoplePage() {
     };
 
     const handleDelete = (id: number) => {
-        setPeople((prev) => prev.filter((p) => p.id !== id));
+        setPeople((prev) => {
+            const updated = prev.filter((p) => p.id !== id);
+            const newTotalPages = Math.ceil(updated.length / ITEMS_PER_PAGE);
+            if (currentPage > newTotalPages && newTotalPages > 0) {
+                setCurrentPage(newTotalPages);
+            }
+            return updated;
+        });
     };
 
     const handleChange = (field: keyof typeof form, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }));
         if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
+    };
+
+    const handleSearch = (value: string) => {
+        setSearch(value);
+        setCurrentPage(1);
     };
 
     const filtered = people.filter(
@@ -105,8 +129,26 @@ export default function PeoplePage() {
             p.lastName.toLowerCase().includes(search.toLowerCase())
     );
 
+    const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+    const safePage = Math.min(currentPage, totalPages);
+    const paginated = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+
     const getInitials = (first: string, last: string) =>
         `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
+
+    // Build page number list with ellipsis logic
+    const getPageNumbers = (): (number | "ellipsis-start" | "ellipsis-end")[] => {
+        if (totalPages <= 7) {
+            return Array.from({ length: totalPages }, (_, i) => i + 1);
+        }
+        if (safePage <= 4) {
+            return [1, 2, 3, 4, 5, "ellipsis-end", totalPages];
+        }
+        if (safePage >= totalPages - 3) {
+            return [1, "ellipsis-start", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        }
+        return [1, "ellipsis-start", safePage - 1, safePage, safePage + 1, "ellipsis-end", totalPages];
+    };
 
     return (
         <div className="min-h-screen bg-slate-100">
@@ -144,7 +186,7 @@ export default function PeoplePage() {
                         <Input
                             placeholder="Search by name…"
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => handleSearch(e.target.value)}
                             className="pl-9 h-10 bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus-visible:ring-violet-500 focus-visible:border-violet-500"
                         />
                     </div>
@@ -169,7 +211,7 @@ export default function PeoplePage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filtered.length === 0 ? (
+                            {paginated.length === 0 ? (
                                 <TableRow className="hover:bg-white">
                                     <TableCell colSpan={4} className="text-center py-16">
                                         <div className="flex flex-col items-center gap-3">
@@ -188,12 +230,14 @@ export default function PeoplePage() {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filtered.map((person, index) => (
+                                paginated.map((person, index) => (
                                     <TableRow
                                         key={person.id}
                                         className="group border-b border-slate-100 hover:bg-slate-50 transition-colors"
                                     >
-                                        <TableCell className="px-5 text-sm text-slate-400 font-mono">{index + 1}</TableCell>
+                                        <TableCell className="px-5 text-sm text-slate-400 font-mono">
+                                            {(safePage - 1) * ITEMS_PER_PAGE + index + 1}
+                                        </TableCell>
                                         <TableCell className="px-5">
                                             <div className="flex items-center gap-3">
                                                 <div className={`h-8 w-8 rounded-full bg-gradient-to-br ${avatarGradients[person.id % avatarGradients.length]} flex items-center justify-center text-xs font-bold text-white shrink-0`}>
@@ -227,11 +271,64 @@ export default function PeoplePage() {
                         </TableBody>
                     </Table>
 
+                    {/* Pagination footer */}
                     {filtered.length > 0 && (
-                        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
+                        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
                             <p className="text-xs text-slate-400">
-                                Showing {filtered.length} of {people.length} record{people.length !== 1 ? "s" : ""}
+                                Showing {(safePage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(safePage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} record{filtered.length !== 1 ? "s" : ""}
                             </p>
+
+                            <Pagination className="mx-0 w-auto">
+                                <PaginationContent>
+                                    <PaginationItem>
+                                        <PaginationPrevious
+                                            href="#"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                if (safePage > 1) setCurrentPage(safePage - 1);
+                                            }}
+                                            className={safePage === 1 ? "pointer-events-none opacity-40" : ""}
+                                        />
+                                    </PaginationItem>
+
+                                    {getPageNumbers().map((page, i) =>
+                                        page === "ellipsis-start" || page === "ellipsis-end" ? (
+                                            <PaginationItem key={page}>
+                                                <PaginationEllipsis />
+                                            </PaginationItem>
+                                        ) : (
+                                            <PaginationItem key={`page-${page}`}>
+                                                <PaginationLink
+                                                    href="#"
+                                                    isActive={page === safePage}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setCurrentPage(page);
+                                                    }}
+                                                    className={
+                                                        page === safePage
+                                                            ? "bg-violet-600 text-white border-violet-600 hover:bg-violet-700 hover:text-white"
+                                                            : ""
+                                                    }
+                                                >
+                                                    {page}
+                                                </PaginationLink>
+                                            </PaginationItem>
+                                        )
+                                    )}
+
+                                    <PaginationItem>
+                                        <PaginationNext
+                                            href="#"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                if (safePage < totalPages) setCurrentPage(safePage + 1);
+                                            }}
+                                            className={safePage === totalPages ? "pointer-events-none opacity-40" : ""}
+                                        />
+                                    </PaginationItem>
+                                </PaginationContent>
+                            </Pagination>
                         </div>
                     )}
                 </div>
